@@ -1,6 +1,5 @@
 import click, os, random, tqdm
 from types import SimpleNamespace
-
 import cv2 as cv, numpy as np
 from keras import backend as K
 from keras.preprocessing.image import load_img, save_img
@@ -10,54 +9,55 @@ from styler.model import zoo
 from styler.util import preprocess, deprocess
 from styler.util import style_loss, content_loss, total_variation_loss
 
-@click.option('--style_file',      default=None)
-@click.option('--content_file',    default=None)
+@click.option('--style',           default=None)
+@click.option('--content',         default=None)
 @click.option('--model',           default='vgg16')
-@click.option('--content_layers',  default=['block1_conv1','block4_conv2'])
-@click.option('--style_layers',    default='all')
-@click.option('--height',          default=256)
-@click.option('--width',           default=256)
-@click.option('--content_weight',  default=0.50)
-@click.option('--style_weight',    default=0.95)
-@click.option('--variation_weight',default=1.15)
-@click.option('--itrs',            default=10)
+@click.option('--content_layers',  default=['block1_conv1','block5_conv3'])
+@click.option('--style_layers',    default=['block4_conv1','block2_conv2'])
+@click.option('--height',          default=512)
+@click.option('--width',           default=512)
+@click.option('--content_weight',  default=1.00)
+@click.option('--style_weight',    default=1.00)
+@click.option('--variation_weight',default=1.00)
 @click.option('--lbfgs_steps',     default=20)
+@click.option('--itrs',            default=10)
 @click.option('--save_progress',   default=False)
-@click.option('--verbose',         default=True)
-@click.option('--temp_file',       default='etc/texture.jpg')
 @click.option('--output_dir',      default='experiments')
+@click.option('--verbose',         default=False)
+@click.option('--seed',            default=0)
 @click.command()
 @click.pass_context
 def run(ctx, **config):
     config = SimpleNamespace(**config)
     verbose= config.verbose
+    identifier, pattern, ext = '{}_{}_v{}_{}','{}_c{}_s{}_v','.png'
+    status = '{:12} | Loss: {:.2E}'
 
-    if config.content_file is None:
+    if config.content is None:
         if verbose: print('<!> no content file found, using noise for texture generation.')
-        config.content_file = config.temp_file
+        config.content = config.temp_file
         config.shape = (config.height, config.width, 3)
-        if not os.path.isfile(config.content_file):
+        if not os.path.isfile(config.content):
             noise_scale, noise_shift = 255, 100
             noise = (np.random.normal(size=config.shape) * noise_scale) + noise_shift
-            cv.imwrite(config.content_file, noise)
+            cv.imwrite(config.content, noise)
     else:
-        w,h = load_img(config.content_file).size
+        w,h = load_img(config.content).size
         config.height= h if not config.height else config.height
         config.width = w if not config.width else config.width
-        w,h = load_img(config.content_file, target_size=(config.height, config.width)).size
+        w,h = load_img(config.content, target_size=(config.height, config.width)).size
         config.shape = (h, w, 3)
-
     h,w,_ = config.shape
 
     if verbose: print('loading style...')
-    style_image = preprocess(config.style_file, *config.shape[:-1])
-    style_id = config.style_file.split('/')[-1].split('.')[0]
+    style_image = preprocess(config.style, *config.shape[:-1])
+    style_id = config.style.split('/')[-1].split('.')[0]
     style_weight = config.style_weight
     if verbose: print('done.')
 
     if verbose: print('loading content...')
-    content_image = preprocess(config.content_file, *config.shape[:-1])
-    content_id = config.content_file.split('/')[-1].split('.')[0]
+    content_image = preprocess(config.content, *config.shape[:-1])
+    content_id = config.content.split('/')[-1].split('.')[0]
     content_weight = config.content_weight
     if verbose: print('done.')
 
@@ -117,7 +117,6 @@ def run(ctx, **config):
         print('                       |')
         print('             resolution|', config.shape[:-1])
         print('             identifier|', config.pair)
-
 
     loss = K.variable(0.)
 
@@ -188,7 +187,4 @@ def run(ctx, **config):
     save_img(output_file, deprocess(output.copy(), h, w))
 
 if __name__ == '__main__':
-    identifier, pattern, ext = '{}_{}_v{}_{}','{}_c{}_s{}_v','.png'
-    status = '{:12} | Loss: {:.2E}'
-    K.tensorflow_backend._get_available_gpus()
     run()
